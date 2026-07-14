@@ -521,39 +521,6 @@ export async function onRequest(context) {
 
         logDebug(`收到代理请求: ${targetUrl}`);
 
-        // 对图片等二进制内容，跳过 KV 缓存，直接请求并透传流
-        // （避免 text() 损坏二进制数据，也避免缓存命中之前损坏的脏数据）
-        try {
-            const targetObj = new URL(targetUrl);
-            // 先快速判断 URL 是否可能为图片（豆瓣图片域名优先处理）
-            const isDoubanImage = targetObj.hostname.endsWith('doubanio.com');
-            if (isDoubanImage) {
-                logDebug(`检测到豆瓣图片，直接透传: ${targetUrl}`);
-                const imgResponse = await fetch(targetUrl, {
-                    headers: {
-                        'User-Agent': getRandomUserAgent(),
-                        'Referer': 'https://movie.douban.com/',
-                        'Accept': '*/*'
-                    },
-                    redirect: 'follow'
-                });
-
-                if (!imgResponse.ok) {
-                    throw new Error(`图片请求失败: ${imgResponse.status}`);
-                }
-
-                const imgHeaders = new Headers(imgResponse.headers);
-                imgHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
-                imgHeaders.set("Access-Control-Allow-Origin", "*");
-                imgHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
-                imgHeaders.set("Access-Control-Allow-Headers", "*");
-                return new Response(imgResponse.body, { status: 200, headers: imgHeaders });
-            }
-        } catch (imgErr) {
-            logDebug(`图片直接透传失败，回退到正常流程: ${imgErr.message}`);
-            // 失败则继续走下面的正常流程
-        }
-
         // --- 缓存检查 (KV) ---
         const cacheKey = `proxy_raw:${targetUrl}`; // 使用原始内容的缓存键
         let kvNamespace = null;
