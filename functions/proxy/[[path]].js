@@ -282,9 +282,18 @@ export async function onRequest(context) {
                  throw new Error(`HTTP error ${response.status}: ${response.statusText}. URL: ${targetUrl}. Body: ${errorBody.substring(0, 150)}`);
             }
 
+            const contentType = response.headers.get('Content-Type') || '';
+
+            // 对二进制内容（图片等），直接返回 Response 对象，避免 text() 损坏数据
+            // 用 isBinary 标记，让主流程跳过 text 处理直接透传
+            const isBinary = /^(image\/|video\/|audio\/|application\/octet-stream)/i.test(contentType);
+            if (isBinary) {
+                logDebug(`检测到二进制内容: ${targetUrl}, Content-Type: ${contentType}`);
+                return { content: null, contentType, responseHeaders: response.headers, binaryResponse: response };
+            }
+
             // 读取响应内容为文本
             const content = await response.text();
-            const contentType = response.headers.get('Content-Type') || '';
             logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
             return { content, contentType, responseHeaders: response.headers }; // 同时返回原始响应头
 
@@ -552,7 +561,18 @@ export async function onRequest(context) {
         }
 
         // --- 实际请求 ---
-        const { content, contentType, responseHeaders } = await fetchContentWithType(targetUrl);
+        const { content, contentType, responseHeaders, binaryResponse } = await fetchContentWithType(targetUrl);
+
+        // 二进制内容（图片等）直接透传流，跳过文本处理和缓存
+        if (binaryResponse) {
+            logDebug(`直接透传二进制内容: ${targetUrl}`);
+            const finalHeaders = new Headers(responseHeaders);
+            finalHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
+            finalHeaders.set("Access-Control-Allow-Origin", "*");
+            finalHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
+            finalHeaders.set("Access-Control-Allow-Headers", "*");
+            return new Response(binaryResponse.body, { status: 200, headers: finalHeaders });
+        }
 
         // --- 写入缓存 (KV) ---
         if (kvNamespace) {
