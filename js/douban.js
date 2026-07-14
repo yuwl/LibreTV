@@ -529,18 +529,16 @@ function renderDoubanCards(data, container) {
                 .replace(/>/g, '&gt;');
             
             // 处理图片URL
-            // 1. 直接使用豆瓣图片URL (添加no-referrer属性)
+            // 豆瓣图片有防盗链，浏览器直接加载会 403
+            // 用项目自带代理 + fetch 转 blob 的方式加载（可自动带鉴权）
             const originalCoverUrl = item.cover;
-            
-            // 2. 也准备代理URL作为备选
-            const proxiedCoverUrl = PROXY_URL + encodeURIComponent(originalCoverUrl);
+            const coverImgId = 'douban-cover-' + Math.random().toString(36).slice(2, 10);
             
             // 为不同设备优化卡片布局
             card.innerHTML = `
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
-                    <img src="${originalCoverUrl}" alt="${safeTitle}" 
+                    <img id="${coverImgId}" data-cover="${originalCoverUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
@@ -568,6 +566,29 @@ function renderDoubanCards(data, container) {
     // 清空并添加所有新元素
     container.innerHTML = "";
     container.appendChild(fragment);
+
+    // DOM 插入后，异步加载豆瓣封面图片
+    // 豆瓣图片有防盗链，浏览器直接 <img> 加载会 403
+    // 用 fetch 走项目代理（自动带鉴权），转 blob URL 给 <img> 显示
+    container.querySelectorAll('img[id^="douban-cover-"]').forEach(img => {
+        const coverUrl = img.dataset.cover;
+        if (!coverUrl) return;
+
+        const proxyBase = PROXY_URL + encodeURIComponent(coverUrl);
+        (window.ProxyAuth?.addAuthToProxyUrl ? window.ProxyAuth.addAuthToProxyUrl(proxyBase) : Promise.resolve(proxyBase))
+            .then(authedUrl => fetch(authedUrl))
+            .then(res => {
+                if (!res.ok) throw new Error('封面加载失败: ' + res.status);
+                return res.blob();
+            })
+            .then(blob => {
+                img.src = URL.createObjectURL(blob);
+            })
+            .catch(err => {
+                console.warn('豆瓣封面加载失败:', err);
+                img.classList.add('object-contain');
+            });
+    });
 }
 
 // 重置到首页

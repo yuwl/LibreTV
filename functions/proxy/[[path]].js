@@ -248,13 +248,26 @@ export async function onRequest(context) {
 
     // 获取远程内容及其类型
     async function fetchContentWithType(targetUrl) {
+        // 根据目标 URL 构造请求头（豆瓣图片需要特定 Referer 绕过防盗链）
+        let referer = request.headers.get('Referer') || '';
+        try {
+            const targetObj = new URL(targetUrl);
+            if (targetObj.hostname.endsWith('doubanio.com')) {
+                referer = 'https://movie.douban.com/';
+            } else if (!referer) {
+                referer = targetObj.origin;
+            }
+        } catch (e) {
+            // 忽略 URL 解析错误
+        }
+
         const headers = new Headers({
             'User-Agent': getRandomUserAgent(),
             'Accept': '*/*',
             // 尝试传递一些原始请求的头信息
             'Accept-Language': request.headers.get('Accept-Language') || 'zh-CN,zh;q=0.9,en;q=0.8',
             // 尝试设置 Referer 为目标网站的域名，或者传递原始 Referer
-            'Referer': request.headers.get('Referer') || new URL(targetUrl).origin
+            'Referer': referer
         });
 
         try {

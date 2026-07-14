@@ -138,12 +138,25 @@ function getRandomUserAgent() {
 
 async function fetchContentWithType(targetUrl, requestHeaders) {
     // 准备请求头
+    // 根据目标 URL 构造请求头（豆瓣图片需要特定 Referer 绕过防盗链）
+    let referer = requestHeaders['referer'] || '';
+    try {
+        const targetObj = new URL(targetUrl);
+        if (targetObj.hostname.endsWith('doubanio.com')) {
+            referer = 'https://movie.douban.com/';
+        } else if (!referer) {
+            referer = targetObj.origin;
+        }
+    } catch (e) {
+        if (!referer) referer = '';
+    }
+
     const headers = {
         'User-Agent': getRandomUserAgent(),
         'Accept': requestHeaders['accept'] || '*/*', // 传递原始 Accept 头（如果有）
         'Accept-Language': requestHeaders['accept-language'] || 'zh-CN,zh;q=0.9,en;q=0.8',
         // 尝试设置一个合理的 Referer
-        'Referer': requestHeaders['referer'] || new URL(targetUrl).origin,
+        'Referer': referer,
     };
     // 清理空值的头
     Object.keys(headers).forEach(key => headers[key] === undefined || headers[key] === null || headers[key] === '' ? delete headers[key] : {});
