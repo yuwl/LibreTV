@@ -282,22 +282,9 @@ export async function onRequest(context) {
                  throw new Error(`HTTP error ${response.status}: ${response.statusText}. URL: ${targetUrl}. Body: ${errorBody.substring(0, 150)}`);
             }
 
-            const contentType = response.headers.get('Content-Type') || '';
-
-            // 对二进制内容（图片等），直接透传 Response.body 流，避免 text() 损坏数据
-            const isBinary = /^(image\/|video\/|audio\/|application\/octet-stream)/i.test(contentType);
-            if (isBinary) {
-                logDebug(`检测到二进制内容: ${targetUrl}, Content-Type: ${contentType}`);
-                const finalHeaders = new Headers(response.headers);
-                finalHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
-                finalHeaders.set("Access-Control-Allow-Origin", "*");
-                finalHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
-                finalHeaders.set("Access-Control-Allow-Headers", "*");
-                return new Response(response.body, { status: 200, headers: finalHeaders });
-            }
-
             // 读取响应内容为文本
             const content = await response.text();
+            const contentType = response.headers.get('Content-Type') || '';
             logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
             return { content, contentType, responseHeaders: response.headers }; // 同时返回原始响应头
 
